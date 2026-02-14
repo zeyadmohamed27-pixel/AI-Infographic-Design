@@ -15,6 +15,11 @@ export enum AspectRatio {
   TALL = '3:4'
 }
 
+export interface GroundingLink {
+  title: string;
+  uri: string;
+}
+
 export interface GeneratedImage {
   id: string;
   url: string;
@@ -22,6 +27,7 @@ export interface GeneratedImage {
   timestamp: number;
   style: DesignStyle;
   ratio: AspectRatio;
+  groundingLinks?: GroundingLink[];
 }
 
 export interface GenerationConfig {
@@ -30,4 +36,5 @@ export interface GenerationConfig {
   ratio: AspectRatio;
   highQuality: boolean;
   variations: number;
+  useMaps: boolean;
 }

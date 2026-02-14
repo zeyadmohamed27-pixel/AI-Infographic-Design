@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ config, setConfig }) => {
       </div>
 
       <div>
-        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">عدد النسخ (Variations)</h3>
+        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">عدد النسخ</h3>
         <div className="flex gap-2">
           {variationOptions.map((v) => (
             <button
@@ -77,9 +77,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ config, setConfig }) => {
         </div>
       </div>
 
-      <div className="pt-4 border-t border-slate-800">
+      <div className="pt-4 border-t border-slate-800 space-y-6">
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-sm font-bold text-slate-300 group-hover:text-blue-400 transition-colors">جودة فائقة (Pro)</span>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-slate-300 group-hover:text-blue-400 transition-colors">خرائط جوجل</span>
+            <span className="text-[10px] text-slate-500">سياق جغرافي حقيقي</span>
+          </div>
+          <div className="relative inline-flex items-center">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={config.useMaps}
+              onChange={(e) => setConfig({ ...config, useMaps: e.target.checked })}
+            />
+            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+          </div>
+        </label>
+
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-slate-300 group-hover:text-blue-400 transition-colors">جودة فائقة (Pro)</span>
+            <span className="text-[10px] text-slate-500">يتطلب Gemini 3 Pro</span>
+          </div>
           <div className="relative inline-flex items-center">
             <input
               type="checkbox"
@@ -90,7 +109,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ config, setConfig }) => {
             <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
           </div>
         </label>
-        <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">تتطلب الجودة الفائقة تفعيل Gemini 3 Pro image preview.</p>
       </div>
     </div>
   );

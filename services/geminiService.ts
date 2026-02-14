@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { DesignStyle, AspectRatio } from "../types";
+import { DesignStyle, AspectRatio, GroundingLink } from "../types";
 
 declare global {
   interface AIStudio {
@@ -17,26 +17,74 @@ export interface ImagePart {
   mimeType: string;
 }
 
+export interface PlaceContextResponse {
+  text: string;
+  links: GroundingLink[];
+}
+
 export class GeminiService {
-  /**
-   * الحصول على المفتاح الحالي من البيئة.
-   * نتعامل مع حالات كونه undefined كمتغير أو "undefined" كنص ناتج عن Vite.
-   */
   private static getCurrentKey(): string {
     const key = process.env.API_KEY;
     if (!key || key === "undefined" || key.trim() === "") return "";
     return key;
   }
 
-  static async enhancePrompt(userPrompt: string, style: DesignStyle, hasImage: boolean): Promise<string> {
+  /**
+   * Use Gemini 2.5 with Google Maps tool to get location-aware context.
+   */
+  static async getPlaceContext(prompt: string, location: { latitude: number; longitude: number }): Promise<PlaceContextResponse> {
+    const key = this.getCurrentKey();
+    if (!key) throw new Error("API key required for maps grounding.");
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-latest",
+        contents: prompt,
+        config: {
+          tools: [{ googleMaps: {} }],
+          toolConfig: {
+            retrievalConfig: {
+              latLng: {
+                latitude: location.latitude,
+                longitude: location.longitude
+              }
+            }
+          }
+        },
+      });
+
+      const text = response.text || "";
+      const links: GroundingLink[] = [];
+      
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (chunks) {
+        chunks.forEach((chunk: any) => {
+          if (chunk.maps) {
+            links.push({
+              title: chunk.maps.title || "عرض على الخريطة",
+              uri: chunk.maps.uri
+            });
+          }
+        });
+      }
+
+      return { text, links };
+    } catch (error: any) {
+      console.error("Maps Grounding Error:", error);
+      throw new Error("فشل الحصول على بيانات المكان: " + error.message);
+    }
+  }
+
+  static async enhancePrompt(userPrompt: string, style: DesignStyle, hasImage: boolean, extraContext?: string): Promise<string> {
     const key = this.getCurrentKey();
     if (!key) return userPrompt;
 
     try {
-      // إنشاء نسخة جديدة لكل طلب لضمان استخدام أحدث مفتاح (قاعدة أساسية)
       const ai = new GoogleGenAI({ apiKey: key });
       const instruction = `You are a professional visual prompt engineer. Style: ${style}. 
         ${hasImage ? "Enhance based on reference." : "Create from scratch."} 
+        ${extraContext ? `Incorporate this geographic context: ${extraContext}` : ""}
         Translate Arabic to English. Focus on composition, lighting, and high-quality artistic terms.`;
 
       const response = await ai.models.generateContent({
@@ -65,11 +113,10 @@ export class GeminiService {
     const key = this.getCurrentKey();
 
     if (!key) {
-      // إذا لم يوجد مفتاح، نحاول فتح نافذة الاختيار إذا كانت مدعومة
       if (window.aistudio) {
         await window.aistudio.openSelectKey();
       }
-      throw new Error("يجب تفعيل مفتاح API أولاً. يرجى النقر على زر 'تفعيل الخدمة' في الأعلى.");
+      throw new Error("يجب تفعيل مفتاح API أولاً.");
     }
 
     try {
@@ -98,7 +145,7 @@ export class GeminiService {
       });
 
       const candidate = response.candidates?.[0];
-      if (!candidate) throw new Error("لم يتم تلقي استجابة من الموديل.");
+      if (!candidate) throw new Error("لم يتم تلقي استجابة.");
 
       for (const part of candidate.content.parts) {
         if (part.inlineData) {
@@ -106,16 +153,15 @@ export class GeminiService {
         }
       }
       
-      throw new Error("الاستجابة لا تحتوي على بيانات صورة صالحة.");
+      throw new Error("الاستجابة لا تحتوي على بيانات صورة.");
     } catch (error: any) {
-      // التعامل مع انتهاء صلاحية المفتاح أو الخطأ في الكيان
       if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key not valid")) {
         if (window.aistudio) {
           await window.aistudio.openSelectKey();
-          throw new Error("انتهت صلاحية الجلسة. يرجى اختيار المفتاح مجدداً والمحاولة.");
+          throw new Error("انتهت صلاحية الجلسة. يرجى اختيار المفتاح مجدداً.");
         }
       }
-      throw new Error(error.message || "فشل التصميم. يرجى المحاولة لاحقاً.");
+      throw new Error(error.message || "فشل التصميم.");
     }
   }
 }

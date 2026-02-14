@@ -2,6 +2,7 @@
   "name": "AI Infographic*",
   "description": "بوت ذكي متخصص في إنشاء الصور والتصميمات البصرية عالية الجودة، يدعم التصميمات ثلاثية الأبعاد والإنفوجرافيك والرسوم التوضيحية الحديثة باستخدام تقنيات Gemini المتقدمة.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ]
 }

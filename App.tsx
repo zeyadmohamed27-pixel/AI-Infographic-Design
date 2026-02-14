@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Button } from './components/Button';
-import { GeminiService, ImagePart } from './services/geminiService';
-import { DesignStyle, AspectRatio, GeneratedImage, GenerationConfig } from './types';
+import { GeminiService, ImagePart, PlaceContextResponse } from './services/geminiService';
+import { DesignStyle, AspectRatio, GeneratedImage, GenerationConfig, GroundingLink } from './types';
 import mammoth from 'mammoth';
 
 const App: React.FC = () => {
@@ -12,7 +12,8 @@ const App: React.FC = () => {
     style: DesignStyle.THREE_D,
     ratio: AspectRatio.SQUARE,
     highQuality: false,
-    variations: 1
+    variations: 1,
+    useMaps: false
   });
   
   const [history, setHistory] = useState<GeneratedImage[]>([]);
@@ -25,9 +26,10 @@ const App: React.FC = () => {
   const [uploadedDocName, setUploadedDocName] = useState<string | null>(null);
   const [extractedDocText, setExtractedDocText] = useState<string | null>(null);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  
+  const [placeContext, setPlaceContext] = useState<PlaceContextResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // تحديث حالة المفتاح بشكل دوري أو عند التشغيل
   const checkKeyStatus = async () => {
     if (window.aistudio) {
       const selected = await window.aistudio.hasSelectedApiKey();
@@ -44,10 +46,22 @@ const App: React.FC = () => {
   const handleConnectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // القاعدة: نفترض النجاح بعد فتح النافذة لتجنب Race Condition
       setHasKey(true);
       setError(null);
     }
+  };
+
+  const getUserLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("متصفحك لا يدعم تحديد الموقع."));
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+          (err) => reject(new Error("فشل الوصول إلى الموقع الجغرافي. يرجى تفعيل الصلاحيات."))
+        );
+      }
+    });
   };
 
   const processFile = async (file: File) => {
@@ -90,9 +104,26 @@ const App: React.FC = () => {
     
     setLoading(true);
     setError(null);
+    setPlaceContext(null);
     
     try {
-      const enhancedPrompt = await GeminiService.enhancePrompt(combinedPrompt || "Visual masterpiece", config.style, !!uploadedImage);
+      let extraContextText = "";
+      let currentLinks: GroundingLink[] = [];
+
+      if (config.useMaps) {
+        const location = await getUserLocation();
+        const context = await GeminiService.getPlaceContext(combinedPrompt || "Places around me", location);
+        setPlaceContext(context);
+        extraContextText = context.text;
+        currentLinks = context.links;
+      }
+
+      const enhancedPrompt = await GeminiService.enhancePrompt(
+        combinedPrompt || "Visual masterpiece", 
+        config.style, 
+        !!uploadedImage,
+        extraContextText
+      );
       
       const generationPromises = Array.from({ length: config.variations }).map(() => 
         GeminiService.generateImage(enhancedPrompt, config.style, config.ratio, config.highQuality, uploadedImage || undefined, Math.floor(Math.random() * 1000000))
@@ -105,7 +136,8 @@ const App: React.FC = () => {
         prompt: (combinedPrompt || "تصميم بصري").slice(0, 100),
         timestamp: Date.now(),
         style: config.style,
-        ratio: config.ratio
+        ratio: config.ratio,
+        groundingLinks: currentLinks.length > 0 ? currentLinks : undefined
       }));
       
       setHistory(prev => [...newImages, ...prev]);
@@ -251,6 +283,23 @@ const App: React.FC = () => {
                 placeholder="تخيل شيئاً مبدعاً... واكتبه هنا بلغة بسيطة"
                 className="w-full bg-transparent border-none focus:ring-0 text-xl p-8 min-h-[160px] placeholder:text-slate-700 resize-none font-medium leading-relaxed"
               />
+
+              {placeContext && (
+                <div className="mx-8 mb-6 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl animate-in slide-in-from-bottom-2">
+                   <div className="flex items-center gap-2 mb-2 text-emerald-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                      <span className="text-[10px] font-black uppercase tracking-widest">تم تحليل الموقع بنجاح</span>
+                   </div>
+                   <p className="text-xs text-slate-400 mb-3 leading-relaxed italic line-clamp-2">"{placeContext.text}"</p>
+                   <div className="flex flex-wrap gap-2">
+                      {placeContext.links.map((link, idx) => (
+                        <a key={idx} href={link.uri} target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
+                          {link.title}
+                        </a>
+                      ))}
+                   </div>
+                </div>
+              )}
               
               <div className="flex items-center justify-between p-6 border-t border-slate-800 bg-slate-950/20">
                 <div className="flex gap-3">
@@ -261,7 +310,7 @@ const App: React.FC = () => {
                   </Button>
                 </div>
                 <Button onClick={handleGenerate} loading={loading} disabled={!config.prompt.trim() && !uploadedImage && !extractedDocText} className="min-w-[160px] shadow-xl shadow-blue-600/20 font-black">
-                  {loading ? 'جاري التصميم...' : 'بدء الإبداع'}
+                  {loading ? 'جاري التحليل والتصميم...' : 'بدء الإبداع'}
                 </Button>
               </div>
             </div>
@@ -314,6 +363,16 @@ const App: React.FC = () => {
                       <span className="text-[10px] font-medium text-slate-600 italic">{new Date(img.timestamp).toLocaleTimeString('ar-EG')}</span>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed line-clamp-2 opacity-80 group-hover:opacity-100 transition-opacity">"{img.prompt}"</p>
+                    
+                    {img.groundingLinks && (
+                      <div className="mt-4 pt-4 border-t border-slate-800 flex flex-wrap gap-2">
+                        {img.groundingLinks.map((link, idx) => (
+                          <a key={idx} href={link.uri} target="_blank" rel="noopener noreferrer" className="text-[8px] font-black bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700 hover:text-emerald-400 hover:border-emerald-500/30 transition-all truncate max-w-full">
+                            {link.title}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -336,11 +395,11 @@ const App: React.FC = () => {
         <div className="flex gap-4">
           <span>CAIRO VISION AI © 2024</span>
           <span className="text-slate-800">|</span>
-          <span>POWERED BY GEMINI 3.0</span>
+          <span>POWERED BY GEMINI 2.5/3.0</span>
         </div>
         <div className="flex items-center gap-2">
            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-           SYSTEM OPERATIONAL
+           GEO-AWARE SYSTEM ACTIVE
         </div>
       </footer>
     </div>
