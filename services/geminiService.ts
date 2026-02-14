@@ -145,7 +145,9 @@ export class GeminiService {
       });
 
       const candidate = response.candidates?.[0];
-      if (!candidate) throw new Error("لم يتم تلقي استجابة.");
+      if (!candidate || !candidate.content || !candidate.content.parts) {
+        throw new Error("لم يتم تلقي استجابة صالحة تحتوي على أجزاء.");
+      }
 
       for (const part of candidate.content.parts) {
         if (part.inlineData) {
